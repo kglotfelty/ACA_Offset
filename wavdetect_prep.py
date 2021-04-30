@@ -1,16 +1,13 @@
 #!/usr/bin/env python
 
-import os
-import sys
-import subprocess
-
-import stk
-from ciao_contrib.runtool import make_tool
-
 'Run wavdetect on obsid'
 
 
-IN_ROOT = "/home/kjg/Projects/ACA_Offset"
+import os
+import sys
+
+import stk
+from ciao_contrib.runtool import make_tool
 
 
 def download(obsid):
@@ -21,7 +18,7 @@ def download(obsid):
               "dtf", "stat", "bias", "flt", "fov", "pbk"]
 
     if os.path.exists(os.path.join(obsid, "repro")):
-        """Skip it if already has repro dir"""
+        # Skip it if already has repro dir
         return
 
     good = download_chandra_obsids([obsid], filetypes=ftypes)
@@ -33,13 +30,13 @@ def repro(obsid):
     'Reprocess data'
 
     if os.path.exists(os.path.join(obsid, "images")):
-        """Skip repro, already done"""
+        # Skip repro, already done
         return
 
     chandra_repro = make_tool("chandra_repro")
-    v = chandra_repro(obsid, outdir="", cleanup=True, clobber=True)
-    if v:
-        open(os.path.join(obsid, "LOG.repro"), "w").write(v+"\n")
+    verb = chandra_repro(obsid, outdir="", cleanup=True, clobber=True)
+    if verb:
+        open(os.path.join(obsid, "LOG.repro"), "w").write(verb+"\n")
 
 
 def check_obsid(obsid):
@@ -51,11 +48,11 @@ def check_obsid(obsid):
     if is_multi_obi_obsid(obsid):
         raise RuntimeError("Skipping -- multi-obi obsid "+obsid)
 
-    mskfile = os.path.join(IN_ROOT, obsid, "secondary", "*msk1.fits*")
+    mskfile = os.path.join(obsid, "secondary", "*msk1.fits*")
 
     try:
         msk = stk.build(mskfile)
-    except:
+    except Exception as bad:
         raise RuntimeError("Skipping -- no mask file for obsid "+obsid)
 
     if len(msk) != 1:
@@ -63,12 +60,12 @@ def check_obsid(obsid):
 
     try:
         tab = read_file(msk[0])
-    except:
+    except Exception as bad:
         raise RuntimeError("Skipping -- can't read mask file "+obsid)
 
-    #~ ver = tab.get_key_value("ASCDSVER")
-    #~ if ver.startswith('8.1') or ver.startswith('8.2') or ver.startswith('8.3'):
-        #~ raise RuntimeError("Skipping -- old version "+obsid)
+    # ~ ver = tab.get_key_value("ASCDSVER")
+    # ~ if ver.startswith('8.1') or ver.startswith('8.2') or ver.startswith('8.3'):
+        # ~ raise RuntimeError("Skipping -- old version "+obsid)
 
     if not tab.get_key_value("OBS_MODE") == "POINTING":
         raise RuntimeError("Skipping -- not pointing "+obsid)
@@ -83,13 +80,13 @@ def check_obsid(obsid):
         if not tab.get_key_value("DTYCYCLE") == 0:
             raise RuntimeError("Skipping -- interleaved "+obsid)
 
-    return (tab.get_key_value("INSTRUME") == "HRC")
+    return tab.get_key_value("INSTRUME") == "HRC"
 
 
 def find_evt(obsid):
     'Locate the evt2 file name'
 
-    evtstk = os.path.join(IN_ROOT, obsid, "repro", "*_evt2.fits")
+    evtstk = os.path.join(obsid, "repro", "*_evt2.fits")
     evtfiles = stk.build(evtstk)
     if len(evtfiles) != 1:
         raise RuntimeError("Foo")
@@ -100,33 +97,33 @@ def make_images(obsid, evt, is_hrc=False):
     'Create image. Also creates the exposure map and psfmap'
 
     if os.path.exists(os.path.join(obsid, "wavdetect")):
-        """Skip if already past onto wavdetect"""
+        # Skip if already past onto wavdetect
         return
 
-    outdir = os.path.join(IN_ROOT, obsid, "images")
+    outdir = os.path.join(obsid, "images")
     os.makedirs(outdir, exist_ok=True)
 
-    fi = make_tool("fluximage")
-    fi.infile = evt
-    fi.outroot = os.path.join(outdir, obsid)
+    fimg = make_tool("fluximage")
+    fimg.infile = evt
+    fimg.outroot = os.path.join(outdir, obsid)
     if is_hrc is True:
-        fi.bands = "wide"
-        fi.binsize = 4
+        fimg.bands = "wide"
+        fimg.binsize = 4
     else:
-        fi.bands = "broad"
-        fi.binsize = 1
-    fi.psfecf = 0.9
-    fi.background = "none"
-    v = fi(clobber=True, parallel=False)
-    if v:
-        open(os.path.join(outdir, "LOG"), "w").write(v+"\n")
+        fimg.bands = "broad"
+        fimg.binsize = 1
+    fimg.psfecf = 0.9
+    fimg.background = "none"
+    verb = fimg(clobber=True, parallel=False)
+    if verb:
+        open(os.path.join(outdir, "LOG"), "w").write(verb+"\n")
 
 
 def run_wavdetect(obsid, edition, skip_exist=False, is_hrc=False):
     'Run wavdetect'
 
-    imgdir = os.path.join(IN_ROOT, obsid, "images")
-    detdir = os.path.join(IN_ROOT, obsid, "wavdetect")
+    imgdir = os.path.join(obsid, "images")
+    detdir = os.path.join(obsid, "wavdetect")
     os.makedirs(detdir, exist_ok=True)
 
     band = "wide" if is_hrc is True else "broad"
@@ -158,21 +155,21 @@ def run_wavdetect(obsid, edition, skip_exist=False, is_hrc=False):
 
     wavdetect.scales = "1.4 2 4 8 12 16 32 48"
 
-    v = wavdetect(clobber=True)
-    if v:
-        open(os.path.join(detdir, "LOG." + edition), "w").write(v + "\n")
+    verb = wavdetect(clobber=True)
+    if verb:
+        open(os.path.join(detdir, "LOG."+edition), "w").write(verb+"\n")
 
-    #~ subprocess.run("gzip -f {}".format(wavdetect.scellfile).split(" "))
-    #~ subprocess.run("gzip -f {}".format(wavdetect.imagefile).split(" "))
-    #~ subprocess.run("gzip -f {}".format(wavdetect.defnbkgfile).split(" "))
+    # ~ import subprocess as subprocess
+    # ~ subprocess.run("gzip -f {}".format(wavdetect.scellfile).split(" "))
+    # ~ subprocess.run("gzip -f {}".format(wavdetect.imagefile).split(" "))
+    # ~ subprocess.run("gzip -f {}".format(wavdetect.defnbkgfile).split(" "))
 
 
 def doit_obsid_main(obsid):
     'Main routine to process a single obsid'
 
     # Setup
-    os.chdir(IN_ROOT)
-    outtmp = os.path.join(IN_ROOT, obsid, "tmp")
+    outtmp = os.path.join(obsid, "tmp")
     os.makedirs(outtmp, exist_ok=True)
     os.environ["ASCDS_WORK_PATH"] = outtmp
 
@@ -199,19 +196,30 @@ def doit_obsid(obsid):
         print("Started "+obsid)
         doit_obsid_main(obsid)
         print("Finished "+obsid)
-    except Exception as ee:
-        print(ee)
+    except Exception as bad:
+        print(bad)
 
 
 def main():
     'Main routine'
     from ciao_contrib._tools.taskrunner import TaskRunner
 
-    if not os.path.exists(IN_ROOT):
-        os.makedirs(IN_ROOT)
+    if len(sys.argv) == 1 or len(sys.argv) > 3:
+        raise RuntimeError("Usage: {} obi.lis [outdir]".format(sys.argv[0]))
 
-    OBI_LIS = "c.lis"
-    obsids = stk.build("@-"+OBI_LIS)
+    obi_lis = sys.argv[1]
+    
+    if os.path.exists(obi_lis):
+        # '@-' builds stack but does not include path name
+        obsids = stk.build("@-" + obi_lis)
+    else:
+        obsids = stk.build(obi_lis)
+
+    if len(sys.argv) == 3:
+        outdir = sys.argv[2]
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
+        os.chdir(outdir)
 
     taskrunner = TaskRunner()
     for obsid in obsids:
